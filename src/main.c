@@ -26,34 +26,31 @@ static void toggle_red(void*);
 
 static void toggle_green(void*)
 {
-    TickType_t green_tick = xTaskGetTickCount();
     gpio_set_direction(GPIO_NUM_25, GPIO_MODE_OUTPUT);
     while (true)
     {
         (*output_reg) ^= 0x02000000;
-        xTaskDelayUntil(&green_tick, pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
 static void toggle_yellow(void*)
 {
-    TickType_t yellow_tick = xTaskGetTickCount();
     gpio_set_direction(GPIO_NUM_26, GPIO_MODE_OUTPUT);
     while (true)
     {
         (*output_reg) ^= 0x04000000;
-        xTaskDelayUntil(&yellow_tick, pdMS_TO_TICKS(800));
+        vTaskDelay(pdMS_TO_TICKS(800));
     }
 }
 
 static void toggle_red(void*)
 {
-    TickType_t red_tick = xTaskGetTickCount();
     gpio_set_direction(GPIO_NUM_27, GPIO_MODE_OUTPUT);
     while (true)
     {
         (*output_reg) ^= 0x08000000;
-        xTaskDelayUntil(&red_tick, pdMS_TO_TICKS(400));
+        vTaskDelay(pdMS_TO_TICKS(400));
     }
 }
 
