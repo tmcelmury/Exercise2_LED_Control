@@ -5,43 +5,49 @@
 #include "driver/gpio.h"
 
 uint32_t* const output_reg = (uint32_t*)0x3FF44004;
-uint32_t* const input_reg = (uint32_t*)0x3FF4403C;
 
-static TaskHandle_t green_led_handle;
 static TaskHandle_t yellow_led_handle;
 static TaskHandle_t red_led_handle;
 
-static TaskHandle_t volatile next_task_handle = NULL;
-
-static BaseType_t status_green_led;
 static BaseType_t status_yellow_led;
 static BaseType_t status_red_led;
 
-static BaseType_t notify_status;
+static TickType_t yellow_tick;
+static TickType_t red_tick;
 
-static void toggle_green(void*);
+//static portMUX_TYPE isr_mux;
+static bool button_status = false;
+
 static void toggle_yellow(void*);
 static void toggle_red(void*);
 static void button_handler(void* args);
+static void switch_priority();
 
 static void button_handler(void* args)
 {
-    xTaskNotify(next_task_handle, 0, eNoAction);
+    button_status = true;
 }
 
-static void toggle_green(void*)
+static void switch_priority()
 {
-    gpio_set_direction(GPIO_NUM_25, GPIO_MODE_OUTPUT);
-    while (true)
+    if (button_status)
     {
-        (*output_reg) ^= 0x02000000;
-        notify_status = xTaskNotifyWait(0, 0, NULL, pdMS_TO_TICKS(1000));
-        if (notify_status == pdTRUE)
+        TaskHandle_t current_task_handle, other_task_handle;
+        BaseType_t temp_priority;
+
+        current_task_handle = xTaskGetCurrentTaskHandle();
+        if (current_task_handle == yellow_led_handle)
         {
-            next_task_handle = yellow_led_handle;
-            gpio_set_level(GPIO_NUM_25, 0);
-            vTaskDelete(NULL);
+            other_task_handle = red_led_handle;
         }
+        else
+        {
+            other_task_handle = yellow_led_handle;
+        }
+        temp_priority = uxTaskPriorityGet(current_task_handle);
+        vTaskPrioritySet(current_task_handle, uxTaskPriorityGet(other_task_handle));
+        vTaskPrioritySet(other_task_handle, temp_priority);
+        button_status = false;
     }
 }
 
@@ -51,13 +57,8 @@ static void toggle_yellow(void*)
     while (true)
     {
         (*output_reg) ^= 0x04000000;
-        notify_status = xTaskNotifyWait(0, 0, NULL, pdMS_TO_TICKS(800));
-        if (notify_status == pdTRUE)
-        {
-            next_task_handle = red_led_handle;
-            gpio_set_level(GPIO_NUM_26, 0);
-            vTaskDelete(NULL);
-        }
+        switch_priority();
+        xTaskDelayUntil(&yellow_tick, pdMS_TO_TICKS(800));
     }
 }
 
@@ -67,12 +68,8 @@ static void toggle_red(void*)
     while (true)
     {
         (*output_reg) ^= 0x08000000;
-        notify_status = xTaskNotifyWait(0, 0, NULL, pdMS_TO_TICKS(400));
-        if (notify_status == pdTRUE)
-        {
-            gpio_set_level(GPIO_NUM_27, 0);
-            vTaskDelete(NULL);
-        }
+        switch_priority();
+        xTaskDelayUntil(&red_tick, pdMS_TO_TICKS(400));
     }
 }
 
@@ -86,8 +83,6 @@ void app_main()
     gpio_install_isr_service(0);
     gpio_isr_handler_add(GPIO_NUM_0, button_handler, (void*) NULL);
     
-    status_green_led = xTaskCreate(toggle_green, "Green LED Task", 2048, NULL, 3, &green_led_handle);
-    next_task_handle = green_led_handle;
-    status_yellow_led = xTaskCreate(toggle_yellow, "Yellow LED Task", 1024, NULL, 2, &yellow_led_handle);
-    status_red_led = xTaskCreate(toggle_red, "Red LED Task", 1024, NULL, 1, &red_led_handle);
+    status_yellow_led = xTaskCreate(toggle_yellow, "Yellow LED Task", 1024, NULL, 3, &yellow_led_handle);
+    status_red_led = xTaskCreate(toggle_red, "Red LED Task", 1024, NULL, 2, &red_led_handle);
 }
